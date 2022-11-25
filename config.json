@@ -54,6 +54,26 @@
       "symbol": "BNBUSDT",
       "interval": "5m",
       "limit": 69
+    },
+    {
+      "symbol": "NEARUSDT",
+      "interval": "5m",
+      "limit": 69
+    },
+    {
+      "symbol": "SOLUSDT",
+      "interval": "5m",
+      "limit": 69
+    },
+    {
+      "symbol": "ATOMUSDT",
+      "interval": "5m",
+      "limit": 69
+    },
+    {
+      "symbol": "TRXUSDT",
+      "interval": "5m",
+      "limit": 69
     }
   ]
 }
