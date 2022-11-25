@@ -2,6 +2,7 @@ import random
 import subprocess
 import threading
 import time
+import numpy as np
 from subprocess import DEVNULL, STDOUT
 import pandas as pd
 import ta
@@ -23,12 +24,8 @@ we_short = "0.1"
 interval = "1m"
 time_wait_ask = random.randint(30, 50)
 
-
 # Limit for Indicators
 # limit = 69
-
-timing = 0.01
-
 
 class Bot_Stoch_RSI_MACD:
     def __init__(self, binance_client, symbol, interval, limit):
@@ -36,13 +33,11 @@ class Bot_Stoch_RSI_MACD:
         self.symbol = symbol
         self.interval = interval
         self.limit = limit
-        print(colored(f"bot {symbol} initiated", "cyan"))
+        print(colored(f"Bot {symbol} initiated", "cyan"))
 
     def dfall(self):
         bars = binance_client.get_historical_klines(
-            self.symbol, interval=self.interval, limit=self.limit, klines_type=HistoricalKlinesType.FUTURES
-        
-        )
+            self.symbol, interval=self.interval, limit=self.limit, klines_type=HistoricalKlinesType.FUTURES)
 
         df = pd.DataFrame(bars)
         df = df.iloc[:, 0:5]
@@ -51,107 +46,108 @@ class Bot_Stoch_RSI_MACD:
         df.index = pd.to_datetime(df.index, unit="ms")
         df = df.astype(float)
 
+
         # Indicators
-        df["stochrsi_k"] = ta.momentum.stochrsi_k(df.Close, window=14, smooth1=3, smooth2=3)
-        df["stochrsi_d"] = ta.momentum.stochrsi_d(df.Close, window=14, smooth1=3, smooth2=3)
-        df["RSI"] = ta.momentum.rsi(df.Close, window=14)
-        df["MACD"] = ta.trend.macd_diff(df.Close, window_slow=52, window_fast=24, window_sign=18)
+        df[f"K_{self.symbol}"] = ta.momentum.stochrsi_k(df.Close, window=14, smooth1=3, smooth2=3)
+        df[f"D_{self.symbol}"] = ta.momentum.stochrsi_d(df.Close, window=14, smooth1=3, smooth2=3)
+        df[f"RSI_{self.symbol}"] = ta.momentum.rsi(df.Close, window=14)
+        df[f"MACD_{self.symbol}"] = ta.trend.macd_diff(df.Close, window_slow=52, window_fast=24, window_sign=18)
         df.dropna(inplace=True)
 
         # Long Signal
-        df["Buy"] = (
-            (df['stochrsi_k'].between(0.2,0.8)) & 
-            (df['stochrsi_d'].between(0.2,0.8)) &
-            (df.stochrsi_k > df.stochrsi_d) &
-            (df.RSI > 50) &
-            (df.MACD > 0)
+        df["Long"] = (
+            (df[f"K_{self.symbol}"].between(0.2,0.8)) & 
+            (df[f"D_{self.symbol}"].between(0.2,0.8)) &
+            (df[f"K_{self.symbol}"] > df[f"D_{self.symbol}"]) &
+            (df[f"RSI_{self.symbol}"] > 51) &
+            (df[f"MACD_{self.symbol}"] > 0)
             )
 
         # #Sell Signal
-        df["Sell"] = (
-            (df['stochrsi_k'].between(0.2,0.8)) & 
-            (df['stochrsi_d'].between(0.2,0.8)) &
-            (df.stochrsi_k < df.stochrsi_d) &
-            (df.RSI < 50) &
-            (df.MACD < 0)
+        df["Short"] = (
+            (df[f"K_{self.symbol}"].between(0.2,0.8)) & 
+            (df[f"D_{self.symbol}"].between(0.2,0.8)) &
+            (df[f"K_{self.symbol}"] < df[f"D_{self.symbol}"]) &
+            (df[f"RSI_{self.symbol}"] < 49) &
+            (df[f"MACD_{self.symbol}"] < 0)
             )
-            
+
+
+        # print(df)
+
         # Start Passivbot
-        if df.Buy.values:
+        if df.Long.values.any():
             print(colored(f"Started Long on {self.symbol}...", "green"))
-            startlong = subprocess.Popen(
-                [
-                    "python3",
-                    "passivbot.py",
-                    "bybit_01",
-                    self.symbol,
-                    config_live_path,
-                    "-lm",
-                    "n",
-                    "-sm",
-                    "gs",
-                    "-lw",
-                    we_long,
-                    "-sw",
-                    we_short,
-                    '-lev',
-                    leverage
+            startlong = subprocess.Popen([
+                "python3",
+                "passivbot.py",
+                "bybit_01",
+                self.symbol,
+                config_live_path,
+                "-lm",
+                "n",
+                "-sm",
+                "gs",
+                "-lw",
+                we_long,
+                "-sw",
+                we_short,
+                '-lev',
+                leverage
                 ],
                 stdout=DEVNULL,
                 stderr=STDOUT,
-            )
+                )
             time.sleep(time_wait_ask)
             startlong.kill()
 
-        elif df.Sell.values:
+        elif df.Short.values.any():
             print(colored(f"Start Short on {self.symbol}...", "red"))
-            startshort = subprocess.Popen(
-                [
-                    "python3",
-                    "passivbot.py",
-                    "bybit_01",
-                    self.symbol,
-                    config_live_path,
-                    "-lm",
-                    "gs",
-                    "-sm",
-                    "n",
-                    "-lw",
-                    we_long,
-                    "-sw",
-                    we_short,
-                    '-lev',
-                    leverage
+            startshort = subprocess.Popen([
+                "python3",
+                "passivbot.py",
+                "bybit_01",
+                self.symbol,
+                config_live_path,
+                "-lm",
+                "gs",
+                "-sm",
+                "n",
+                "-lw",
+                we_long,
+                "-sw",
+                we_short,
+                '-lev',
+                leverage
                 ],
                 stdout=DEVNULL,
                 stderr=STDOUT,
-            )
+                )
             time.sleep(time_wait_ask)
             startshort.kill()
 
         else:
-            print(colored(f"Waiting for entry on {self.symbol}...", "yellow"))
-            stopbot = subprocess.Popen(
-                [
-                    "python3",
-                    "passivbot.py",
-                    "bybit_01",
-                    self.symbol,
-                    config_live_path,
-                    "-lm",
-                    "gs",
-                    "-sm",
-                    "gs",
-                    "-lw",
-                    we_long,
-                    "-sw",
-                    we_short,
-                    '-lev',
-                    leverage
+            print(colored(f"Waiting signal for {self.symbol}...", "yellow"))
+            stopbot = subprocess.Popen([
+                "python3",
+                "passivbot.py",
+                "bybit_01",
+                self.symbol,
+                config_live_path,
+                "-lm",
+                "gs",
+                "-sm",
+                "gs",
+                "-lw",
+                we_long,
+                "-sw",
+                we_short,
+                '-lev',
+                leverage
                 ],
                 stdout=DEVNULL,
                 stderr=STDOUT,
-            )
+                )
             time.sleep(time_wait_ask)
             stopbot.kill()
 
@@ -160,7 +156,6 @@ class Bot_Stoch_RSI_MACD:
     def run_dfall(self):
         while True:
             self.dfall()
-
 
 def read_config():
     import json
